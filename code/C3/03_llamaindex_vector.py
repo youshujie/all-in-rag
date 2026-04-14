@@ -17,3 +17,4 @@ index = VectorStoreIndex.from_documents(docs)
 persist_path = "./llamaindex_index_store"
 index.storage_context.persist(persist_dir=persist_path)
 print(f"LlamaIndex 索引已保存至: {persist_path}")
+
