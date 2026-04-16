@@ -34,31 +34,37 @@ class Encoder:
 
 def visualize_results(query_image_path: str, retrieved_images: list, img_height: int = 300, img_width: int = 300, row_count: int = 3) -> np.ndarray:
     """从检索到的图像列表创建一个全景图用于可视化。"""
+    """将1张查询图片+一堆检索出来的图片拼接成大的图，方便直观查看检索结果"""
+    # 右边：检索结果大图
     panoramic_width = img_width * row_count
     panoramic_height = img_height * row_count
     panoramic_image = np.full((panoramic_height, panoramic_width, 3), 255, dtype=np.uint8)
+    # 左边：查询图
     query_display_area = np.full((panoramic_height, img_width, 3), 255, dtype=np.uint8)
 
     # 处理查询图像
     query_pil = Image.open(query_image_path).convert("RGB")
     query_cv = np.array(query_pil)[:, :, ::-1]
-    resized_query = cv2.resize(query_cv, (img_width, img_height))
-    bordered_query = cv2.copyMakeBorder(resized_query, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=(255, 0, 0))
-    query_display_area[img_height * (row_count - 1):, :] = cv2.resize(bordered_query, (img_width, img_height))
+    resized_query = cv2.resize(query_cv, (img_width, img_height)) # 缩放到统一大小
+    bordered_query = cv2.copyMakeBorder(resized_query, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=(255, 0, 0))  # 给查询图加红色边框
+    query_display_area[img_height * (row_count - 1):, :] = cv2.resize(bordered_query, (img_width, img_height))  # 查询图放左下角
     cv2.putText(query_display_area, "Query", (10, panoramic_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
 
     # 处理检索到的图像
     for i, img_path in enumerate(retrieved_images):
+        # 计算放在第几行、第几列
         row, col = i // row_count, i % row_count
         start_row, start_col = row * img_height, col * img_width
         
+         # 打开 + 缩放 + 加黑色细边框
         retrieved_pil = Image.open(img_path).convert("RGB")
         retrieved_cv = np.array(retrieved_pil)[:, :, ::-1]
         resized_retrieved = cv2.resize(retrieved_cv, (img_width - 4, img_height - 4))
         bordered_retrieved = cv2.copyMakeBorder(resized_retrieved, 2, 2, 2, 2, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+        # 贴到右边大图的对应位置
         panoramic_image[start_row:start_row + img_height, start_col:start_col + img_width] = bordered_retrieved
         
-        # 添加索引号
+        # 给每张图标上红色序号（0、1、2...）
         cv2.putText(panoramic_image, str(i), (start_col + 10, start_row + 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
     return np.hstack([query_display_area, panoramic_image])
@@ -100,20 +106,20 @@ print(milvus_client.describe_collection(collection_name=COLLECTION_NAME))
 print(f"\n--> 正在向 '{COLLECTION_NAME}' 插入数据")
 data_to_insert = []
 for image_path in tqdm(image_list, desc="生成图像嵌入"):
-    vector = encoder.encode_image(image_path)
-    data_to_insert.append({"vector": vector, "image_path": image_path})
+    vector = encoder.encode_image(image_path) # 将图片编码成向量
+    data_to_insert.append({"vector": vector, "image_path": image_path}) # 符合schema结构的格式
 
 if data_to_insert:
-    result = milvus_client.insert(collection_name=COLLECTION_NAME, data=data_to_insert)
+    result = milvus_client.insert(collection_name=COLLECTION_NAME, data=data_to_insert) 
     print(f"成功插入 {result['insert_count']} 条数据。")
 
 # 6. 创建索引
 print(f"\n--> 正在为 '{COLLECTION_NAME}' 创建索引")
 index_params = milvus_client.prepare_index_params()
 index_params.add_index(
-    field_name="vector",
-    index_type="HNSW",
-    metric_type="COSINE",
+    field_name="vector", # 索引建在vector字段上
+    index_type="HNSW", # 基于图的索引，检索速度极快
+    metric_type="COSINE", # 余弦相似度
     params={"M": 16, "efConstruction": 256}
 )
 milvus_client.create_index(collection_name=COLLECTION_NAME, index_params=index_params)
@@ -125,9 +131,9 @@ print("已加载 Collection 到内存中。")
 
 # 7. 执行多模态检索
 print(f"\n--> 正在 '{COLLECTION_NAME}' 中执行检索")
-query_image_path = os.path.join(DATA_DIR, "dragon", "query.png")
+query_image_path = os.path.join(DATA_DIR, "dragon", "query.png") 
 query_text = "一条龙"
-query_vector = encoder.encode_query(image_path=query_image_path, text=query_text)
+query_vector = encoder.encode_query(image_path=query_image_path, text=query_text) # 编码包含图片和文本的组合查询
 
 search_results = milvus_client.search(
     collection_name=COLLECTION_NAME,
