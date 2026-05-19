@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from llama_index.core import VectorStoreIndex
 from llama_index.core.schema import IndexNode
 from llama_index.experimental.query_engine import PandasQueryEngine
+# from llama_index.core.query_engine import PandasQueryEngine
 from llama_index.core.retrievers import RecursiveRetriever
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.llms.deepseek import DeepSeek
